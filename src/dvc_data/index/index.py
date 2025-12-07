@@ -159,6 +159,20 @@ class Storage(ABC):
         fs, path = self.get(entry)
         return fs.exists(path)
 
+    def bulk_exists(
+        self,
+        entries: list["DataIndexEntry"],
+        refresh: bool = False,
+        max_workers: int | None = None,
+        callback: "Callback" = DEFAULT_CALLBACK,
+        cached_info: dict[str, Any] | None = None,
+    ) -> dict["DataIndexEntry", bool]:
+        results = {}
+        for entry in callback.wrap(entries):
+            results[entry] = self.exists(entry)
+
+        return results
+
 
 class ObjectStorage(Storage):
     def __init__(
@@ -283,9 +297,11 @@ class ObjectStorage(Storage):
             value = cast("str", entry.hash_info.value)
             key = self.odb._oid_parts(value)
 
-            if isinstance(info, Exception) or info is None:
+            if isinstance(info, FileNotFoundError) or info is None:
                 self.index.pop(key, None)
                 results[entry] = False
+            elif isinstance(info, Exception):
+                raise info
             else:
                 from .build import build_entry
 
@@ -545,14 +561,10 @@ class StorageMapping(MutableMapping):
 
             if not isinstance(storage, ObjectStorage):
                 # We won't optimize this and run it normally.
-                if hasattr(storage, "bulk_exists"):
-                    storage_results = storage.bulk_exists(
-                        storage_entries, callback=callback, **kwargs
-                    )
-                    results.update(storage_results)
-                else:
-                    for entry in callback.wrap(storage_entries):
-                        results[entry] = storage.exists(entry, **kwargs)
+                storage_results = storage.bulk_exists(
+                    storage_entries, callback=callback, **kwargs
+                )
+                results.update(storage_results)
                 continue
 
             key = (type(storage), storage.path)
