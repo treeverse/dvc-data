@@ -75,6 +75,7 @@ addopts = "-ra --benchmark-skip"
 filterwarnings = [
     "error",
     "ignore:datetime.datetime.*:DeprecationWarning",
+    "default:^Benchmark machine_info is different\\..*:pytest_benchmark.logger.PytestBenchmarkWarning",
 ]
 
 [tool.coverage.run]
