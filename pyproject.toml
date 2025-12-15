@@ -56,7 +56,7 @@ tests = [
 dev = [
     "dvc-data[all]",
     "dvc-data[tests]",
-    "mypy==1.19.0",
+    "mypy==1.19.1",
     "types-tqdm",
 ]
 
