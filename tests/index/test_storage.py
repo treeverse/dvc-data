@@ -1,4 +1,3 @@
-import pytest
 from dvc_objects.fs.local import LocalFileSystem
 
 from dvc_data.hashfile.hash_info import HashInfo
@@ -9,7 +8,6 @@ from dvc_data.index import (
     FileStorage,
     ObjectStorage,
     StorageInfo,
-    StorageKeyError,
     StorageMapping,
 )
 
@@ -220,8 +218,9 @@ class TestStorageMappingBulkExists:
             hash_info=HashInfo("md5", "d3b07384d113edec49eaa6238ad5ff00"),
         )
 
-        with pytest.raises(StorageKeyError):
-            smap.bulk_cache_exists([entry])
+        result = smap.bulk_cache_exists([entry])
+        # no cache storage, should be skipped
+        assert entry not in result
 
     def test_bulk_remote_exists_missing_storage(self, odb):
         smap = StorageMapping()
@@ -232,8 +231,9 @@ class TestStorageMappingBulkExists:
             hash_info=HashInfo("md5", "d3b07384d113edec49eaa6238ad5ff00"),
         )
 
-        with pytest.raises(StorageKeyError):
-            smap.bulk_remote_exists([entry])
+        result = smap.bulk_remote_exists([entry])
+        # no remote storage, should be skipped
+        assert entry not in result
 
     def test_bulk_exists_multiple_storages(self, make_odb):
         cache1 = make_odb()
@@ -244,6 +244,29 @@ class TestStorageMappingBulkExists:
         smap = StorageMapping()
         smap.add_cache(ObjectStorage(key=(), odb=cache1))
         smap.add_cache(ObjectStorage(key=("subdir",), odb=cache2))
+
+        entry1 = DataIndexEntry(
+            key=("foo",),
+            hash_info=HashInfo("md5", "hash1"),
+        )
+        entry2 = DataIndexEntry(
+            key=("subdir", "bar"),
+            hash_info=HashInfo("md5", "hash2"),
+        )
+
+        result = smap.bulk_cache_exists([entry1, entry2])
+        assert result[entry1] is True
+        assert result[entry2] is True
+
+    def test_bulk_exists_shared_odb(self, make_odb):
+        odb = make_odb()
+        odb.add_bytes("hash1", b"data1")
+        odb.add_bytes("hash2", b"data2")
+
+        smap = StorageMapping()
+        # two logical storages, one physical ODB
+        smap.add_cache(ObjectStorage(key=(), odb=odb))
+        smap.add_cache(ObjectStorage(key=("subdir",), odb=odb))
 
         entry1 = DataIndexEntry(
             key=("foo",),
