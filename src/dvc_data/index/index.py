@@ -521,7 +521,7 @@ class StorageMapping(MutableMapping):
     def _bulk_storage_exists(
         self,
         entries: list[DataIndexEntry],
-        storage_attr: str = "cache",  # TODO: proper name
+        storage: str,
         **kwargs,
     ) -> dict[DataIndexEntry, bool]:
         by_storage: dict[Storage, list[DataIndexEntry]] = defaultdict(list)
@@ -530,24 +530,24 @@ class StorageMapping(MutableMapping):
         )
         for entry in entries:
             storage_info = self[entry.key]
-            storage = getattr(storage_info, storage_attr) if storage_info else None
-            if isinstance(storage, ObjectStorage):
-                by_odb[storage.odb][storage].append(entry)
-            elif storage is not None:
-                by_storage[storage].append(entry)
+            storage_obj = getattr(storage_info, storage) if storage_info else None
+            if isinstance(storage_obj, ObjectStorage):
+                by_odb[storage_obj.odb][storage_obj].append(entry)
+            elif storage_obj is not None:
+                by_storage[storage_obj].append(entry)
 
         for storages in by_odb.values():
             assert storages  # cannot be empty, we always add at least one entry
-            rep = next(iter(storages))
-            by_storage[rep] = [e for entries in storages.values() for e in entries]
+            representative = next(iter(storages))
+            by_storage[representative] = [
+                e for entries in storages.values() for e in entries
+            ]
 
         results = {}
 
-        # Actually process batches
-        for storage, storage_entries in by_storage.items():
-            # Finally, distribute results back to original storages
+        for storage_obj, storage_entries in by_storage.items():
             results.update(
-                storage.bulk_exists(
+                storage_obj.bulk_exists(
                     storage_entries,
                     **kwargs,
                 )
