@@ -247,13 +247,13 @@ class ObjectStorage(Storage):
         jobs: Optional[int] = None,
         callback: "Callback" = DEFAULT_CALLBACK,
     ) -> dict["DataIndexEntry", bool]:
-        if not entries:
-            return {}
-
         entries_with_hash = [e for e in entries if e.hash_info]
         entries_without_hash = [e for e in entries if not e.hash_info]
         results = dict.fromkeys(entries_without_hash, False)
         callback.relative_update(len(entries_without_hash))
+
+        if not entries_with_hash:
+            return results
 
         if self.index is None or not refresh:
             for entry in callback.wrap(entries_with_hash):
@@ -270,6 +270,12 @@ class ObjectStorage(Storage):
         entry_map: dict[str, DataIndexEntry] = {
             self.get(entry)[1]: entry for entry in entries_with_hash
         }
+
+        try:
+            self.fs.ls(self.odb.path)  # check for fs access
+        except FileNotFoundError:
+            pass
+
         info_results = self.fs.info(
             list(entry_map.keys()),
             batch_size=jobs,
