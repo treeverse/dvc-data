@@ -240,13 +240,15 @@ class ObjectStorage(Storage):
         finally:
             self.index.commit()
 
-    def bulk_exists(
+    def bulk_exists(  # noqa: C901
         self,
         entries: list["DataIndexEntry"],
         refresh: bool = False,
         jobs: Optional[int] = None,
         callback: "Callback" = DEFAULT_CALLBACK,
     ) -> dict["DataIndexEntry", bool]:
+        from .build import build_entry
+
         entries_with_hash = [e for e in entries if e.hash_info]
         entries_without_hash = [e for e in entries if not e.hash_info]
         results = dict.fromkeys(entries_without_hash, False)
@@ -267,9 +269,10 @@ class ObjectStorage(Storage):
                 results[entry] = exists
             return results
 
-        entry_map: dict[str, DataIndexEntry] = {
-            self.get(entry)[1]: entry for entry in entries_with_hash
-        }
+        path_to_entries: dict[str, list[DataIndexEntry]] = defaultdict(list)
+        for entry in entries_with_hash:
+            _, path = self.get(entry)
+            path_to_entries[path].append(entry)
 
         try:
             self.fs.ls(self.odb.path)  # check for fs access
@@ -277,29 +280,26 @@ class ObjectStorage(Storage):
             pass
 
         info_results = self.fs.info(
-            list(entry_map.keys()),
+            list(path_to_entries),
             batch_size=jobs,
             return_exceptions=True,
             callback=callback,
         )
 
-        for (path, entry), info in zip(entry_map.items(), info_results):
+        for (path, _entries), info in zip(path_to_entries.items(), info_results):
+            if isinstance(info, Exception) and not isinstance(info, FileNotFoundError):
+                raise info
+            assert _entries
+            entry = _entries[0]
             assert entry.hash_info  # built from entries_with_hash
             value = cast("str", entry.hash_info.value)
             key = self.odb._oid_parts(value)
-
-            if isinstance(info, FileNotFoundError) or info is None:
+            exists = info is not None and not isinstance(info, FileNotFoundError)
+            if exists:
+                self.index[key] = build_entry(path, self.fs, info=info)
+            else:
                 self.index.pop(key, None)
-                results[entry] = False
-                continue
-            if isinstance(info, Exception):
-                raise info
-
-            from .build import build_entry
-
-            built_entry = build_entry(path, self.fs, info=info)
-            self.index[key] = built_entry
-            results[entry] = True
+            results.update(dict.fromkeys(entries, exists))
 
         if self.index is not None:
             self.index.commit()
