@@ -1,3 +1,4 @@
+import pytest
 from dvc_objects.fs.local import LocalFileSystem
 
 from dvc_data.hashfile.hash_info import HashInfo
@@ -155,9 +156,17 @@ class TestObjectStorageBulkExists:
         result = storage.bulk_exists(entries)
         assert all(result[e] is True for e in entries)
 
-    def test_duplicate_hashes_exist(self, odb):
+    @pytest.mark.parametrize("use_index", [True, False])
+    @pytest.mark.parametrize("refresh", [True, False])
+    def test_duplicate_hashes_exist(self, odb, use_index, refresh):
         """Multiple entries with same hash should all return True if exists."""
-        storage = ObjectStorage(key=(), odb=odb)
+        index = None
+        if use_index:
+            index = DataIndex()
+            key = odb._oid_parts("d3b07384d113edec49eaa6238ad5ff00")
+            index[key] = DataIndexEntry(key=key)
+
+        storage = ObjectStorage(key=(), odb=odb, index=index)
         entries = [
             DataIndexEntry(
                 key=("foo",),
@@ -169,13 +178,15 @@ class TestObjectStorageBulkExists:
             ),
         ]
 
-        result = storage.bulk_exists(entries)
+        result = storage.bulk_exists(entries, refresh=refresh)
         assert result == {entries[0]: True, entries[1]: True}
 
-    def test_duplicate_hashes_not_exist(self, make_odb):
+    @pytest.mark.parametrize("use_index", [True, False])
+    @pytest.mark.parametrize("refresh", [True, False])
+    def test_duplicate_hashes_not_exist(self, odb, use_index, refresh):
         """Multiple entries with same hash should all return False if not exists."""
-        empty_odb = make_odb()
-        storage = ObjectStorage(key=(), odb=empty_odb)
+        index = DataIndex() if use_index else None
+        storage = ObjectStorage(key=(), odb=odb, index=index)
         entries = [
             DataIndexEntry(
                 key=("foo",),
@@ -187,7 +198,7 @@ class TestObjectStorageBulkExists:
             ),
         ]
 
-        result = storage.bulk_exists(entries)
+        result = storage.bulk_exists(entries, refresh=refresh)
         assert result == {entries[0]: False, entries[1]: False}
 
 
