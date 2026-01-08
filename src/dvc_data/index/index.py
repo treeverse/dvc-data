@@ -4,7 +4,8 @@ import os
 from abc import ABC, abstractmethod
 from collections import defaultdict
 from collections.abc import Iterator, MutableMapping
-from typing import TYPE_CHECKING, Any, Callable, Optional, cast
+from itertools import repeat
+from typing import TYPE_CHECKING, Any, Callable, Optional, Union, cast
 
 import attrs
 from fsspec import Callback
@@ -17,6 +18,8 @@ from dvc_data.hashfile.meta import Meta
 from dvc_data.hashfile.tree import Tree
 
 if TYPE_CHECKING:
+    from collections.abc import Iterable
+
     from dvc_objects.fs.base import FileSystem
 
     from dvc_data.hashfile.db import HashFileDB
@@ -240,7 +243,7 @@ class ObjectStorage(Storage):
         finally:
             self.index.commit()
 
-    def bulk_exists(  # noqa: C901
+    def bulk_exists(  # noqa: C901, PLR0912
         self,
         entries: list["DataIndexEntry"],
         refresh: bool = False,
@@ -274,17 +277,24 @@ class ObjectStorage(Storage):
             _, path = self.get(entry)
             path_to_entries[path].append(entry)
 
+        info_results: Union[
+            Iterable[Union[Exception, Optional[dict[str, Any]]]], None
+        ] = None
         try:
             self.fs.ls(self.odb.path)  # check for fs access
-        except FileNotFoundError:
+        except FileNotFoundError as exc:
+            info_results = repeat(exc, len(path_to_entries))
+            callback.relative_update(len(entries_with_hash))
+        except NotImplementedError:
+            # some filesystems don't implement ls
             pass
-
-        info_results = self.fs.info(
-            list(path_to_entries),
-            batch_size=jobs,
-            return_exceptions=True,
-            callback=callback,
-        )
+        if info_results is None:
+            info_results = self.fs.info(
+                list(path_to_entries),
+                batch_size=jobs,
+                return_exceptions=True,
+                callback=callback,
+            )
 
         for (path, _entries), info in zip(path_to_entries.items(), info_results):
             if isinstance(info, Exception) and not isinstance(info, FileNotFoundError):
@@ -302,6 +312,7 @@ class ObjectStorage(Storage):
             results.update(dict.fromkeys(_entries, exists))
 
         if self.index is not None:
+            logger.debug("Committing index results")
             self.index.commit()
 
         return results

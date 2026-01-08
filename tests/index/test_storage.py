@@ -1,6 +1,7 @@
 import pytest
 from dvc_objects.fs.local import LocalFileSystem
 
+from dvc_data.hashfile.db import HashFileDB
 from dvc_data.hashfile.hash_info import HashInfo
 from dvc_data.hashfile.meta import Meta
 from dvc_data.index import (
@@ -199,6 +200,29 @@ class TestObjectStorageBulkExists:
         ]
 
         result = storage.bulk_exists(entries, refresh=refresh)
+        assert result == {entries[0]: False, entries[1]: False}
+
+    def test_bulk_check_with_ls_not_implemented(self, tmp_path_factory):
+        class NonTraversableFileSystem(LocalFileSystem):
+            def ls(self, *args, **kwargs):
+                raise NotImplementedError
+
+        index = DataIndex()
+        path = tmp_path_factory.mktemp("odb")
+        odb = HashFileDB(fs=NonTraversableFileSystem(), path=path)
+        storage = ObjectStorage(key=(), odb=odb, index=index)
+        entries = [
+            DataIndexEntry(
+                key=("foo",),
+                hash_info=HashInfo("md5", "d3b07384d113edec49eaa6238ad5ff00"),
+            ),
+            DataIndexEntry(
+                key=("bar",),
+                hash_info=HashInfo("md5", "c157a79031e1c40f85931829bc5fc552"),
+            ),
+        ]
+
+        result = storage.bulk_exists(entries, refresh=True)
         assert result == {entries[0]: False, entries[1]: False}
 
 
