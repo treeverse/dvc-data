@@ -155,6 +155,41 @@ class TestObjectStorageBulkExists:
         result = storage.bulk_exists(entries)
         assert all(result[e] is True for e in entries)
 
+    def test_duplicate_hashes_exist(self, odb):
+        """Multiple entries with same hash should all return True if exists."""
+        storage = ObjectStorage(key=(), odb=odb)
+        entries = [
+            DataIndexEntry(
+                key=("foo",),
+                hash_info=HashInfo("md5", "d3b07384d113edec49eaa6238ad5ff00"),
+            ),
+            DataIndexEntry(
+                key=("bar",),
+                hash_info=HashInfo("md5", "d3b07384d113edec49eaa6238ad5ff00"),
+            ),
+        ]
+
+        result = storage.bulk_exists(entries)
+        assert result == {entries[0]: True, entries[1]: True}
+
+    def test_duplicate_hashes_not_exist(self, make_odb):
+        """Multiple entries with same hash should all return False if not exists."""
+        empty_odb = make_odb()
+        storage = ObjectStorage(key=(), odb=empty_odb)
+        entries = [
+            DataIndexEntry(
+                key=("foo",),
+                hash_info=HashInfo("md5", "00000000000000000000000000000000"),
+            ),
+            DataIndexEntry(
+                key=("bar",),
+                hash_info=HashInfo("md5", "00000000000000000000000000000000"),
+            ),
+        ]
+
+        result = storage.bulk_exists(entries)
+        assert result == {entries[0]: False, entries[1]: False}
+
 
 class TestStorageMappingBulkExists:
     def test_bulk_cache_exists_empty(self, odb):
