@@ -299,7 +299,7 @@ class ObjectStorage(Storage):
                 self.index[key] = build_entry(path, self.fs, info=info)
             else:
                 self.index.pop(key, None)
-            results.update(dict.fromkeys(entries, exists))
+            results.update(dict.fromkeys(_entries, exists))
 
         if self.index is not None:
             self.index.commit()
