@@ -42,7 +42,7 @@ Source = "https://github.com/iterative/dvc-data"
 
 [project.optional-dependencies]
 cli = [
-    "typer-slim>=0.12",
+    "typer>=0.12",
 ]
 all = [
     "dvc-data[cli]",
