@@ -172,7 +172,7 @@ class HashFileDB(ObjectDB):
 
         assert actual.name == self.hash_name
         assert actual.value
-        if actual.value.split(".")[0] != oid.split(".")[0]:
+        if actual.value.split(".")[0] != oid.split(".", maxsplit=1)[0]:
             logger.debug("corrupted cache file '%s'.", obj.path)
             with suppress(FileNotFoundError):
                 self.fs.remove(obj.path)

@@ -768,7 +768,7 @@ def _load_from_storage(trie, entry, storage_info):
             else:
                 _load_from_file_storage(trie, entry, storage)
             return True
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             # NOTE: this might be some random fs exception, e.g. auth error
             last_exc = exc
             logger.debug(
