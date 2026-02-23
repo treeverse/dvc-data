@@ -76,7 +76,7 @@ def _filter_changed(index):
             ret.add(entry)
             continue
 
-        meta = Meta.from_info(info)
+        meta = Meta.from_info(info, data_fs.protocol)
         old = getattr(entry.meta, data_fs.PARAM_CHECKSUM, None) if entry.meta else None
         new = getattr(meta, data_fs.PARAM_CHECKSUM, None)
 
