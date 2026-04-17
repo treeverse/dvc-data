@@ -57,6 +57,14 @@ class Meta:
         ):
             checksum = info.get("ETag") or info.get("Content-MD5")
 
+        mtime = info.get("mtime")
+        if mtime is None and protocol and protocol.startswith("http"):
+            last_modified = info.get("Last-Modified")
+            if last_modified:
+                from email.utils import parsedate_to_datetime
+
+                mtime = parsedate_to_datetime(last_modified).timestamp()
+
         version_id = info.get("version_id")
         if protocol == "s3" and "VersionId" in info:
             version_id = info.get("VersionId")
@@ -73,7 +81,7 @@ class Meta:
             checksum,
             info.get("md5"),
             info.get("ino"),
-            info.get("mtime"),
+            mtime,
             info.get("remote"),
             info.get("islink", False),
             info.get("destination"),
