@@ -28,7 +28,7 @@ jobs:
       with:
         python-version: '3.14'
 
-    - uses: actions/checkout@v6
+    - uses: actions/checkout@v7
       with:
         ref: ${{ github.event.pull_request.base.sha }}
         fetch-depth: 0
@@ -40,7 +40,7 @@ jobs:
     - name: Benchmark on base branch
       run: nox -s bench -- --benchmark-save=base
 
-    - uses: actions/checkout@v6
+    - uses: actions/checkout@v7
       with:
         fetch-depth: 0
         clean: false
