@@ -217,7 +217,9 @@ def test_recheckout_old_obj(tmp_path, relink):
 
 
 def get_inode_and_mtime(path):
-    return inode(path), get_mtime_and_size(os.fspath(path), localfs)[0]
+    # A list, not a tuple: the link cache serializes as JSON, which has no
+    # tuple type, so `state.links[...]` reads back as a list.
+    return [inode(path), get_mtime_and_size(os.fspath(path), localfs)[0]]
 
 
 def test_checkout_save_link_dir(request, tmp_path):

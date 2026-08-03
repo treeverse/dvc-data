@@ -208,7 +208,9 @@ def test_state_many(tmp_path, state: State):
 
 def test_set_link(tmp_path, state):
     state.set_link(tmp_path / "foo", 42, "mtime")
-    assert state.links["foo"] == (42, "mtime")
+    # The link cache serializes as JSON, which has no tuple type, so the pair
+    # reads back as a list. `get_unused_links` compares it as a sequence.
+    assert tuple(state.links["foo"]) == (42, "mtime")
 
 
 def test_state_noop(tmp_path):
@@ -249,7 +251,9 @@ def test_links(tmp_path, state: State):
         return inode(path), get_mtime_and_size(path, fs)[0]
 
     assert len(state.links) == 3
-    assert {k: state.links[k] for k in state.links} == {
+    # Values come back as lists: the link cache serializes as JSON, which has
+    # no tuple type.
+    assert {k: tuple(state.links[k]) for k in state.links} == {
         "foo": _get_inode_mtime(foo),
         "bar": _get_inode_mtime(bar),
         "dataset": _get_inode_mtime(dataset),
@@ -272,3 +276,36 @@ def test_links(tmp_path, state: State):
     assert not foo.exists()
     assert not bar.exists()
     assert not dataset.exists()
+
+
+def test_legacy_pickled_links_are_dropped(tmp_path):
+    """A links cache written by an older dvc-data is discarded, not unpickled.
+
+    `get_unused_links` iterates the cache, and reading a legacy entry evicts
+    it, so the loop must tolerate the mutation rather than raising KeyError.
+    """
+    import diskcache
+
+    from dvc_data.hashfile.cache import Disk
+
+    tmp = tmp_path / "tmp"
+    links_dir = tmp / "links"
+    links_dir.mkdir(parents=True)
+
+    foo = tmp_path / "foo"
+    foo.write_text("foo content", encoding="utf-8")
+
+    with diskcache.Cache(str(links_dir), disk=Disk, disk_pickle_protocol=4) as cache:
+        cache.disk._type = cache._type = "links"
+        cache["foo"] = (inode(os.fspath(foo)), "mtime")
+
+    fs = LocalFileSystem()
+    state = State(root_dir=os.fspath(tmp_path), tmp_dir=os.fspath(tmp))
+    try:
+        assert state.get_unused_links([], fs) == []
+
+        # Re-recording the link works, and is stored without pickle.
+        state.save_link(os.fspath(foo), fs)
+        assert set(state.get_unused_links([], fs)) == {"foo"}
+    finally:
+        state.close()
