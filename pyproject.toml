@@ -120,6 +120,7 @@ module = [
     "fsspec.*",
     "funcy",
     "diskcache",
+    "diskcache.core",
     "pygtrie",
     "dictdiffer",
     "shortuuid.*",

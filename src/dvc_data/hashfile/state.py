@@ -307,16 +307,25 @@ class State(StateBase):
         unused = []
 
         with self.links as ref:
-            for relative_path in ref:
+            # Materialize the keys: reading an entry written by an older,
+            # pickle-serializing dvc-data drops it, which would mutate the
+            # cache while we iterate it.
+            for relative_path in list(ref):
                 path = os.path.join(self.root_dir, relative_path)
 
                 if path in used or not fs.exists(path):
                     continue
 
+                entry = ref.get(relative_path)
+                if entry is None:
+                    continue
+
                 inode = get_inode(path)
                 mtime, _ = get_mtime_and_size(path, fs, self.ignore)
 
-                if ref[relative_path] == (inode, mtime):
+                # The link cache round-trips this pair through JSON, which has
+                # no tuple type, so compare as a sequence rather than by type.
+                if tuple(entry) == (inode, mtime):
                     logger.debug("Removing '%s' as unused link.", path)
                     unused.append(relative_path)
 
