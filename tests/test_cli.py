@@ -4,6 +4,7 @@ import sys
 from importlib.metadata import version
 
 import pytest
+from rich.text import Text
 from typer.testing import CliRunner
 
 from dvc_data.cli import app
@@ -25,11 +26,18 @@ def test_version(args):
     assert result.stdout.strip() == f"dvc-data, version {version('dvc-data')}"
 
 
-def test_help():
+@pytest.mark.parametrize("force_color", [False, True])
+def test_help(monkeypatch, force_color):
+    monkeypatch.delenv("NO_COLOR", raising=False)
+    monkeypatch.delenv("FORCE_COLOR", raising=False)
+    monkeypatch.setenv("TERM", "xterm")
+    if force_color:
+        monkeypatch.setenv("FORCE_COLOR", "1")
     result = run_cli("--help")
     assert result.returncode == 0, result.stderr
-    assert "--version" in result.stdout
-    assert "hash" in result.stdout
+    help_text = Text.from_ansi(result.stdout).plain
+    assert "--version" in help_text
+    assert "hash" in help_text
 
 
 def test_hash(tmp_path):
