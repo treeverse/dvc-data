@@ -14,6 +14,29 @@ from dvc_data.index import (
 )
 
 
+@pytest.mark.parametrize(
+    "local_kind, inherited_kind",
+    [("data", "cache"), ("cache", "remote"), ("remote", "data")],
+)
+def test_added_storage_does_not_freeze_inherited_storage(
+    tmp_path, local_kind, inherited_kind
+):
+    fs = LocalFileSystem()
+    mapping = StorageMapping()
+    old = FileStorage((), fs, str(tmp_path / "old"))
+    new = FileStorage((), fs, str(tmp_path / "new"))
+    local = FileStorage(("data",), fs, str(tmp_path / "data"))
+    getattr(mapping, f"add_{inherited_kind}")(old)
+    getattr(mapping, f"add_{local_kind}")(local)
+    getattr(mapping, f"add_{inherited_kind}")(new)
+
+    resolved = mapping[("data", "file")]
+    assert getattr(resolved, local_kind) is local
+    assert getattr(resolved, inherited_kind) is new
+    del mapping[()]
+    assert getattr(mapping[("data", "file")], inherited_kind) is None
+
+
 def test_map_get(tmp_path, odb):
     smap = StorageMapping()
 
