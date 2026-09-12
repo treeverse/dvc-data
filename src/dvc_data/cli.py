@@ -8,12 +8,12 @@ import stat
 import sys
 from collections import deque
 from contextlib import closing
+from importlib.metadata import version
 from itertools import accumulate
 from pathlib import Path
 from posixpath import relpath
 from typing import Optional
 
-import click
 import typer
 from attrs import asdict
 from dvc_objects.errors import ObjectFormatError
@@ -119,6 +119,25 @@ app = Application(
     context_settings={"help_option_names": ["-h", "--help"]},
     add_completion=False,
 )
+
+
+def version_callback(value: bool) -> None:
+    if value:
+        typer.echo(f"dvc-data, version {version('dvc-data')}")
+        raise typer.Exit
+
+
+@app.callback()
+def cli(
+    version: bool = typer.Option(
+        False,
+        "--version",
+        callback=version_callback,
+        is_eager=True,
+        help="Show the version and exit.",
+    ),
+) -> None:
+    pass
 
 
 @app.command(name="hash", help="Compute checksum of the file")
@@ -565,9 +584,7 @@ def index_ls(path: str = typer.Argument(""), site_cache_dir: Path = typer.Option
     print_table([header, *collect_rows(root)])
 
 
-cmd = typer.main.get_command(app)
-wrapper = click.version_option()
-main = wrapper(cmd)
+main = typer.main.get_command(app)
 
 
 if __name__ == "__main__":
