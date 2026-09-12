@@ -468,17 +468,17 @@ class StorageMapping(MutableMapping):
         return len(self._map)
 
     def add_data(self, storage: "Storage"):
-        info = self.get(storage.key) or StorageInfo()
+        info = self._map.get(storage.key) or StorageInfo()
         info.data = storage
         self[storage.key] = info
 
     def add_cache(self, storage: "Storage"):
-        info = self.get(storage.key) or StorageInfo()
+        info = self._map.get(storage.key) or StorageInfo()
         info.cache = storage
         self[storage.key] = info
 
     def add_remote(self, storage: "Storage"):
-        info = self.get(storage.key) or StorageInfo()
+        info = self._map.get(storage.key) or StorageInfo()
         info.remote = storage
         self[storage.key] = info
 
