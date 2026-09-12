@@ -9,6 +9,7 @@ from .index import DataIndex, DataIndexEntry
 def write_db(index: DataIndex, path: str) -> None:
     cache = Cache(path)
     with closing(cache), cache.transact():
+        cache.clear()
         for key, entry in index.iteritems():
             cache["/".join(key)] = entry.to_dict()
 
