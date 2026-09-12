@@ -1,10 +1,45 @@
+import json
 from operator import itemgetter
 
 import pytest
+from dvc_objects.errors import ObjectFormatError
+from dvc_objects.fs.local import LocalFileSystem
 
+from dvc_data.hashfile.db import HashFileDB
 from dvc_data.hashfile.hash_info import HashInfo
 from dvc_data.hashfile.meta import Meta
-from dvc_data.hashfile.tree import MergeError, Tree, _merge
+from dvc_data.hashfile.tree import MergeError, Tree, _merge, _try_load
+
+
+@pytest.mark.parametrize(
+    "entries",
+    [[None], [{}], [{"relpath": 42}], [{"relpath": "file", "md5": "a", "sha256": "b"}]],
+)
+def test_load_malformed_tree_entries_reports_corruption(tmp_path, entries):
+    odb = HashFileDB(LocalFileSystem(), str(tmp_path / "cache"))
+    info = HashInfo("md5", "abcd.dir")
+    assert info.value is not None
+    odb.add_bytes(info.value, json.dumps(entries).encode())
+
+    with pytest.raises(ObjectFormatError, match="corrupted"):
+        Tree.load(odb, info)
+
+
+def test_try_load_falls_back_after_malformed_tree_entries(tmp_path):
+    fs = LocalFileSystem()
+    first = HashFileDB(fs, str(tmp_path / "first"))
+    second = HashFileDB(fs, str(tmp_path / "second"))
+    info = HashInfo("md5", "abcd.dir")
+    assert info.value is not None
+    first.add_bytes(info.value, b"[{}]")
+    second.add_bytes(info.value, b'[{"relpath":"file","md5":"abc"}]')
+
+    loaded = _try_load([first, second], info)
+
+    assert isinstance(loaded, Tree)
+    entry = loaded.get(("file",))
+    assert entry is not None
+    assert entry[1] == HashInfo("md5", "abc")
 
 
 @pytest.mark.parametrize(
