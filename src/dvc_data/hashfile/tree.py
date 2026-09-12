@@ -204,7 +204,10 @@ class Tree(HashFile):
 
         if hash_name is None and odb.hash_name == "md5-dos2unix":
             hash_name = "md5-dos2unix"
-        tree = cls.from_list(raw, hash_name=hash_name)
+        try:
+            tree = cls.from_list(raw, hash_name=hash_name)
+        except (AttributeError, KeyError, TypeError, ValueError) as exc:
+            raise ObjectFormatError(f"{obj} is corrupted") from exc
         tree.path = obj.path
         tree.fs = obj.fs
         tree.hash_info = hash_info
