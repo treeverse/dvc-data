@@ -6,6 +6,7 @@ from dvc_data.hashfile.meta import Meta
 from dvc_data.index import (
     DataIndex,
     DataIndexEntry,
+    FileStorage,
     ObjectStorage,
     add,
     build,
@@ -65,6 +66,62 @@ def test_save(tmp_path, odb):
     assert odb.exists("1f69c66028c35037e8bf67e5bc4ceb6a.dir")
     assert odb.exists("c157a79031e1c40f85931829bc5fc552")
     assert odb.exists("258622b1688250cb619f3c9ccaefb7eb")
+
+
+@pytest.mark.parametrize("immutable", [True, False])
+@pytest.mark.parametrize("name", ["md5", "md5-dos2unix"])
+@pytest.mark.parametrize("matches", [True, False])
+def test_md5_validates_existing_hash(tmp_path, monkeypatch, immutable, name, matches):
+    (tmp_path / "foo").write_bytes(b"foo\n")
+    fs = LocalFileSystem()
+    monkeypatch.setattr(fs, "immutable", immutable, raising=False)
+    index = build(str(tmp_path), fs)
+    expected = HashInfo(
+        name, "d3b07384d113edec49eaa6238ad5ff00" if matches else "0" * 32
+    )
+    index[("foo",)].hash_info = expected
+
+    result = md5(index, name=name)
+
+    assert result.storage_map is index.storage_map
+    assert index[("foo",)].hash_info == expected
+    if matches:
+        assert result[("foo",)].hash_info == expected
+    else:
+        assert ("foo",) not in result
+
+
+@pytest.mark.parametrize("immutable", [True, False])
+def test_fetch_does_not_cache_mismatched_hash(
+    tmp_path, make_odb, monkeypatch, immutable
+):
+    from dvc_data.index.fetch import collect, fetch
+
+    (tmp_path / "foo").write_bytes(b"foo\n")
+    fs = LocalFileSystem()
+    monkeypatch.setattr(fs, "immutable", immutable, raising=False)
+    index = build(str(tmp_path), fs)
+    expected = "0" * 32
+    index[("foo",)].hash_info = HashInfo("md5", expected)
+    cache = make_odb()
+    index.storage_map.add_cache(ObjectStorage((), cache))
+    index.storage_map.add_remote(FileStorage((), fs, str(tmp_path)))
+
+    transferred, _ = fetch(collect([index], "remote"))
+
+    assert transferred == 0
+    assert not cache.exists(expected)
+
+
+def test_md5_preserves_legacy_hash(tmp_path, monkeypatch):
+    (tmp_path / "foo").write_bytes(b"foo\r\n")
+    fs = LocalFileSystem()
+    monkeypatch.setattr(fs, "immutable", True, raising=False)
+    index = build(str(tmp_path), fs)
+    expected = HashInfo("md5-dos2unix", "d3b07384d113edec49eaa6238ad5ff00")
+    index[("foo",)].hash_info = expected
+
+    assert md5(index)[("foo",)].hash_info == expected
 
 
 def test_add(tmp_path):

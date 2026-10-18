@@ -60,13 +60,12 @@ def md5(
             continue
 
         matches = _meta_matches(fs, path, entry.meta)
-        if matches:
-            ret.add(entry)
-        elif matches is not None:
+        if matches is False:
             continue
 
         try:
-            _, hi = hash_file(path, fs, name, state=state)
+            hash_name = hash_info.name if hash_info and hash_info.name else name
+            _, hi = hash_file(path, fs, hash_name, state=state)
         except FileNotFoundError:
             continue
 
