@@ -90,7 +90,8 @@ def _do_transfer(  # noqa: C901
 
         logger.debug("transfer dir: %s with %d files", dir_hash, len(bound_file_ids))
 
-        dir_fails = _add(src, dest, bound_file_ids, **kwargs)
+        dir_fails = entry_ids & failed_ids
+        dir_fails.update(_add(src, dest, bound_file_ids, **kwargs))
         if dir_fails:
             logger.debug(
                 "failed to upload full contents of '%s', aborting .dir file upload",
