@@ -26,6 +26,7 @@ if TYPE_CHECKING:
     from dvc_objects.fs.base import AnyFSPath, FileSystem
     from fsspec import Callback
 
+    from dvc_data.hashfile.db import HashFileDB
     from dvc_data.hashfile.hash_info import HashInfo
     from dvc_data.hashfile.state import StateBase
 
@@ -65,6 +66,34 @@ def _delete_files(
         return
 
     fs.remove([fs.join(path, *(entry.key or ())) for entry in entries])
+
+
+def _cache_objects(
+    entries: list["DataIndexEntry"],
+    index: Optional["BaseDataIndex"],
+) -> list[tuple["HashFileDB", str]]:
+    """Find the cache objects that the given workspace entries may link to."""
+    if index is None:
+        return []
+
+    objects = []
+    for entry in entries:
+        if not entry.hash_info or not entry.hash_info.value:
+            continue
+        try:
+            storage = index.storage_map[entry.key].cache
+        except KeyError:
+            continue
+        if not isinstance(storage, ObjectStorage):
+            continue
+        objects.append((storage.odb, storage.odb.oid_to_path(entry.hash_info.value)))
+    return objects
+
+
+def _protect_objects(objects: list[tuple["HashFileDB", str]]) -> None:
+    for odb, obj_path in objects:
+        if odb.fs.exists(obj_path):
+            odb.protect(obj_path)
 
 
 def _create_files(  # noqa: C901, PLR0912, PLR0913
@@ -353,11 +382,21 @@ def apply(
     for entry in diff.dirs_failed:
         onerror(None, fs.join(path, *entry.key), None)
 
+    # NOTE: On some filesystems (e.g. NTFS) a hardlink shares its read-only
+    # attribute with the cache object. Deleting a protected hardlink has to
+    # clear that attribute first, which leaves the cache object writable too,
+    # so we protect those objects again after the workspace files are gone.
+    deleted_objects = (
+        _cache_objects(diff.files_delete, diff.new)
+        if isinstance(fs, LocalFileSystem)
+        else []
+    )
     _delete_files(
         diff.files_delete,
         path,
         fs,
     )
+    _protect_objects(deleted_objects)
     _delete_dirs(diff.dirs_delete, path, fs)
     _create_dirs(diff.dirs_create, path, fs)
 
