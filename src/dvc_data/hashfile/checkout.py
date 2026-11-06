@@ -355,7 +355,7 @@ def _checkout(  # noqa: C901
         raise CheckoutError(failed)
 
 
-def checkout(  # noqa: PLR0913
+def checkout(  # noqa: PLR0913, PLR0917
     path: str,
     fs: "FileSystem",
     obj: Union["HashFile", "Tree"],

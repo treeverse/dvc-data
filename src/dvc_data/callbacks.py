@@ -44,6 +44,10 @@ class Tqdm(tqdm):
         "miniters": 1,
     }
 
+    # always set in __init__, narrower than tqdm's `str | Mapping | None`
+    postfix: dict[str, Any]
+    bar_format: str
+
     def __init__(
         self,
         iterable=None,

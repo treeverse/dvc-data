@@ -67,7 +67,7 @@ def _delete_files(
     fs.remove([fs.join(path, *(entry.key or ())) for entry in entries])
 
 
-def _create_files(  # noqa: C901, PLR0912, PLR0913
+def _create_files(  # noqa: C901, PLR0912, PLR0913, PLR0917
     entries,
     index: Optional["BaseDataIndex"],
     path: str,
