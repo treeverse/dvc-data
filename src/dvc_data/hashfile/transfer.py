@@ -172,7 +172,7 @@ def _add(
     return failed
 
 
-def transfer(  # noqa: PLR0913
+def transfer(  # noqa: PLR0913, PLR0917
     src: "HashFileDB",
     dest: "HashFileDB",
     obj_ids: Iterable["HashInfo"],
