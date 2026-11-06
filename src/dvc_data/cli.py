@@ -13,7 +13,6 @@ from pathlib import Path
 from posixpath import relpath
 from typing import Optional
 
-import click
 import typer
 from attrs import asdict
 from dvc_objects.errors import ObjectFormatError
@@ -119,6 +118,27 @@ app = Application(
     context_settings={"help_option_names": ["-h", "--help"]},
     add_completion=False,
 )
+
+
+def _version_callback(value: bool) -> None:
+    import importlib.metadata
+
+    if value:
+        print(f"dvc-data, version {importlib.metadata.version('dvc-data')}")
+        raise typer.Exit
+
+
+@app.callback()
+def _callback(
+    version: bool = typer.Option(
+        False,
+        "--version",
+        help="Show the version and exit.",
+        callback=_version_callback,
+        is_eager=True,
+    ),
+) -> None:
+    pass
 
 
 @app.command(name="hash", help="Compute checksum of the file")
@@ -565,9 +585,7 @@ def index_ls(path: str = typer.Argument(""), site_cache_dir: Path = typer.Option
     print_table([header, *collect_rows(root)])
 
 
-cmd = typer.main.get_command(app)
-wrapper = click.version_option()
-main = wrapper(cmd)
+main = typer.main.get_command(app)
 
 
 if __name__ == "__main__":

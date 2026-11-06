@@ -19,6 +19,7 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
     "Programming Language :: Python :: 3.14",
+    "Programming Language :: Python :: 3.15",
     "Development Status :: 4 - Beta",
 ]
 requires-python = ">=3.9"
@@ -42,7 +43,7 @@ Source = "https://github.com/iterative/dvc-data"
 
 [project.optional-dependencies]
 cli = [
-    "typer>=0.12",
+    "typer>=0.16",
 ]
 all = [
     "dvc-data[cli]",
