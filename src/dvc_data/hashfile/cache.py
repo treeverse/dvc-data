@@ -6,12 +6,12 @@ from functools import wraps
 from itertools import zip_longest
 from typing import Any, ClassVar, Literal, Optional
 
-import diskcache
-from diskcache import Disk as _Disk
-from diskcache import (
+import diskcache_community as diskcache
+from diskcache_community import (
     Index,  # noqa: F401
     Timeout,  # noqa: F401
 )
+from diskcache_community import SafeDisk as _Disk
 
 from dvc_data.compat import batched
 
@@ -56,14 +56,14 @@ class Cache(diskcache.Cache):
         self,
         directory: Optional[str] = None,
         timeout: int = 60,
-        disk: _Disk = Disk,
+        disk: type[_Disk] = Disk,
         type: Optional[str] = None,  # noqa: A002
         **settings: Any,
     ) -> None:
         settings.setdefault("disk_pickle_protocol", 4)
         settings.setdefault("cull_limit", 0)
         super().__init__(directory=directory, timeout=timeout, disk=disk, **settings)
-        self.disk._type = self._type = type or os.path.basename(self.directory)
+        self.disk._type = self._type = type or os.path.basename(self.directory)  # type: ignore[attr-defined]
 
     def __getstate__(self):
         return (*super().__getstate__(), self._type)
@@ -121,7 +121,14 @@ class HashesCache(Cache):
         return exists == 0
 
     def get(
-        self, key, default=None, read=False, expire_time=False, tag=False, retry=False
+        self,
+        key,
+        default=None,
+        read=False,
+        expire_time=False,
+        tag=False,
+        retry=False,
+        store_time=False,
     ):
         cursor = self._sql("SELECT value FROM Cache WHERE key = ? and raw = 1", (key,))
         if rows := cursor.fetchall():
