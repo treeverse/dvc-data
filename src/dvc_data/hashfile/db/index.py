@@ -117,7 +117,12 @@ class ObjectDBIndex(ObjectDBIndexBase):
 
     def dir_hashes(self) -> Iterator[str]:
         """Iterate over .dir hashes stored in the index."""
-        yield from (hash_ for hash_, is_dir in self.index.items() if is_dir)
+        # Read via get() rather than items(): an entry written by an older,
+        # pickle-serializing dvc-data is dropped as a miss, and iterating
+        # items() would race that eviction and raise KeyError.
+        for hash_ in list(self.index):
+            if self.index.get(hash_):
+                yield hash_
 
     def clear(self) -> None:
         """Clear this index (to force re-indexing later)."""
