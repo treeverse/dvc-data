@@ -98,16 +98,15 @@ class ObjectDBIndex(ObjectDBIndexBase):
     ) -> None:
         from dvc_objects.fs import LocalFileSystem
 
-        from dvc_data.hashfile.cache import Cache, Index
+        from dvc_data.hashfile.cache import Index
 
         self.index_dir = os.path.join(tmp_dir, self.INDEX_DIR, name)
         self.fs = LocalFileSystem()
         self.fs.makedirs(self.index_dir, exist_ok=True)
-        self._cache = Cache(self.index_dir, eviction_policy="none", type="index")
-        self.index = Index.fromcache(self._cache)
+        self.index = Index(self.index_dir, type="index")
 
     def close(self) -> None:
-        return self._cache.close()
+        self.index.close()
 
     def __iter__(self) -> Iterator[str]:
         return iter(self.index)
