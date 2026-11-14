@@ -12,7 +12,7 @@ nox.options.sessions = "lint", "tests"
 
 project = nox.project.load_toml()
 python_versions = nox.project.python_versions(project)
-pypy_versions = ["pypy3.9", "pypy3.10", "pypy3.11"]
+pypy_versions = ["pypy3.10", "pypy3.11"]
 
 
 @nox.session(python=python_versions + pypy_versions)
