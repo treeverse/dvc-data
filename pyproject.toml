@@ -13,7 +13,6 @@ license-files = ["LICENSE"]
 authors = [{ name = "Iterative", email = "support@dvc.org" }]
 classifiers = [
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
@@ -22,12 +21,12 @@ classifiers = [
     "Programming Language :: Python :: 3.15",
     "Development Status :: 4 - Beta",
 ]
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 dynamic = ["version"]
 dependencies = [
     "attrs>=21.3.0",
     "dictdiffer>=0.8.1",
-    "diskcache>=5.2.1",
+    "pysciqlop-cache>=0.4.2",
     "dvc-objects>=5.2,<6",
     "fsspec>=2024.2.0",
     "funcy>=1.14; python_version < '3.12'",
@@ -120,7 +119,6 @@ ignore_missing_imports = true
 module = [
     "fsspec.*",
     "funcy",
-    "diskcache",
     "pygtrie",
     "dictdiffer",
     "shortuuid.*",
@@ -132,6 +130,8 @@ skip = "CODE_OF_CONDUCT.rst"
 
 [tool.ruff]
 show-fixes = true
+# Kept at 3.9 so dropping 3.9 does not rewrite every annotation in this change.
+target-version = "py39"
 
 [tool.ruff.lint]
 preview = true

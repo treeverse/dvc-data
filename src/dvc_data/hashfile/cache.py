@@ -1,17 +1,10 @@
+import json
 import os
-import pickle
-import sqlite3
 from collections.abc import Iterable, Iterator, Sequence
-from functools import wraps
-from itertools import zip_longest
-from typing import Any, ClassVar, Literal, Optional
+from typing import Any, ClassVar, Optional
 
-import diskcache
-from diskcache import Disk as _Disk
-from diskcache import (
-    Index,  # noqa: F401
-    Timeout,  # noqa: F401
-)
+import pysciqlop_cache
+from pysciqlop_cache import Timeout  # noqa: F401
 
 from dvc_data.compat import batched
 
@@ -23,107 +16,100 @@ class DiskError(Exception):
         super().__init__(f"Could not open disk '{type}' in {directory}")
 
 
-def translate_pickle_error(fn):
-    @wraps(fn)
-    def wrapped(self, *args, **kwargs):
-        try:
-            return fn(self, *args, **kwargs)
-        except (pickle.PickleError, ValueError) as e:
-            if isinstance(e, ValueError) and "pickle protocol" not in str(e):
-                raise
+class _Serializer:
+    """Base of the value encodings. None of them can run code on load
+    (CVE-2025-69872). An entry that cannot be decoded raises DiskError, so dvc
+    tells the user to remove the cache directory, as it did for bad pickles."""
 
+    name: str
+
+    def __init__(self, directory: str, type: str) -> None:  # noqa: A002
+        self._directory = directory
+        self._type = type
+
+    def loads(self, data: "bytes | memoryview") -> Any:
+        try:
+            return self._decode(str(data, "utf-8"))
+        except ValueError as e:  # UnicodeDecodeError and JSONDecodeError
             raise DiskError(self._directory, type=self._type) from e
 
-    return wrapped
+    def dumps(self, value: Any) -> bytes:
+        raise NotImplementedError
+
+    def _decode(self, text: str) -> Any:
+        raise NotImplementedError
 
 
-class Disk(_Disk):
-    """Reraise pickle-related errors as DiskError."""
+class _Text(_Serializer):
+    """str values, stored as their UTF-8 bytes."""
 
-    # we need type to differentiate cache for better error messages
-    _type: str
+    name = "dvc-text"
 
-    put = translate_pickle_error(_Disk.put)
-    get = translate_pickle_error(_Disk.get)
-    store = translate_pickle_error(_Disk.store)
-    fetch = translate_pickle_error(_Disk.fetch)
+    def dumps(self, value: str) -> bytes:
+        return value.encode()
+
+    def _decode(self, text: str) -> str:
+        return text
 
 
-class Cache(diskcache.Cache):
-    """Extended to handle pickle errors and use a constant pickle protocol."""
+class _Json(_Serializer):
+    """JSON values. JSON has no tuple type: arrays come back as tuples."""
 
+    name = "dvc-json"
+    # json.dumps() with any keyword builds a new encoder on every call.
+    _encode = json.JSONEncoder(separators=(",", ":")).encode
+
+    def dumps(self, value: Any) -> bytes:
+        return self._encode(value).encode()
+
+    def _decode(self, text: str) -> Any:
+        value = json.loads(text)
+        return tuple(value) if isinstance(value, list) else value
+
+
+class Cache(pysciqlop_cache.Cache):
     def __init__(
         self,
         directory: Optional[str] = None,
         timeout: int = 60,
-        disk: _Disk = Disk,
         type: Optional[str] = None,  # noqa: A002
         **settings: Any,
     ) -> None:
-        settings.setdefault("disk_pickle_protocol", 4)
-        settings.setdefault("cull_limit", 0)
-        super().__init__(directory=directory, timeout=timeout, disk=disk, **settings)
-        self.disk._type = self._type = type or os.path.basename(self.directory)
-
-    def __getstate__(self):
-        return (*super().__getstate__(), self._type)
+        directory = os.fspath(directory) if directory is not None else None
+        self._type = type or os.path.basename(directory or "")
+        serializer = _Json(directory or "", self._type)
+        super().__init__(directory, serializer=serializer, timeout=timeout, **settings)
 
 
-class HashesCache(Cache):
-    SUPPORTS_UPSERT = sqlite3.sqlite_version_info >= (3, 24, 0)
-    SQLITE_MAX_VARIABLE_NUMBER: ClassVar[Literal[999]] = 999
-    """The maximum number of host parameters is 999 for SQLite versions prior to 3.32.0
-    (2020-05-22) or 32766 for SQLite versions after 3.32.0.
+class Index(pysciqlop_cache.Index):
+    SERIALIZER: ClassVar[type[_Serializer]] = _Json
 
-    Increasing this number does not yield any performance improvement, so we leave it at
-    the old default.
-    """
+    def __init__(self, directory: str, type: Optional[str] = None) -> None:  # noqa: A002
+        directory = os.fspath(directory)
+        self._type = type or os.path.basename(directory)
+        super().__init__(directory, serializer=self.SERIALIZER(directory, self._type))
 
-    def get_many(
+
+class HashesCache(Index):
+    """A bare key-value store of the JSON text dvc builds: hashes need no expiry,
+    LRU or tags, and the text is stored as is."""
+
+    SERIALIZER = _Text
+    BATCH_SIZE: ClassVar[int] = 999
+    SUPPORTS_UPSERT: ClassVar[bool] = True  # kept for callers; every set is an upsert
+
+    # dvc's API: (key, value) pairs in the order asked, not the base class's dict.
+    def get_many(  # type: ignore[override]
         self, keys: Iterable[str], default=None
     ) -> Iterator[tuple[str, Optional[str]]]:
-        if self.is_empty():
-            yield from zip_longest(keys, [])
-            return
-
-        for chunk in batched(keys, self.SQLITE_MAX_VARIABLE_NUMBER):
-            params = ", ".join("?" * len(chunk))
-            query = f"SELECT key, value FROM Cache WHERE key IN ({params}) and raw = 1"  # noqa: S608
-            d = dict(self._sql(query, chunk).fetchall())
+        for chunk in batched(keys, self.BATCH_SIZE):
+            found = super().get_many(chunk)
             for key in chunk:
-                yield key, d.get(key, default)
+                yield key, found.get(key, default)
 
     def set_many(self, items: Sequence[tuple[str, str]], retry: bool = False) -> None:
-        if not items:
-            return
-
-        if self.SUPPORTS_UPSERT:
-            query = (
-                "INSERT INTO Cache("
-                " key, raw, store_time, expire_time, access_time,"
-                " tag, mode, filename, value"
-                ") VALUES (?, 1, 0, null, 0, null, 1, null, ?)"
-                " ON CONFLICT(key, raw) DO UPDATE SET value = excluded.value"
-            )
-        else:
-            query = (
-                "INSERT OR REPLACE INTO Cache("
-                " key, raw, store_time, expire_time, access_time,"
-                " tag, mode, filename, value"
-                ") VALUES (?, 1, 0, null, 0, null, 1, null, ?)"
-            )
-        with self.transact(retry):
-            self._con.executemany(query, items)
+        if items:
+            super().set_many(items)
 
     def is_empty(self) -> bool:
-        res = self._sql("SELECT EXISTS (SELECT 1 FROM Cache)")
-        ((exists,),) = res
-        return exists == 0
-
-    def get(
-        self, key, default=None, read=False, expire_time=False, tag=False, retry=False
-    ):
-        cursor = self._sql("SELECT value FROM Cache WHERE key = ? and raw = 1", (key,))
-        if rows := cursor.fetchall():
-            return rows[0][0]
-        return default
+        return len(self) == 0
