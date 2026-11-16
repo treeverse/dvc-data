@@ -144,7 +144,7 @@ def fetch(
                 fetched += len(result.transferred)
                 failed += len(result.failed)
             elif isinstance(cache, ObjectStorage):
-                updated = md5(fs_index)
+                updated = md5(fs_index, odb=cache.odb)
 
                 def _on_error(failed, oid, exc):
                     if isinstance(exc, FileNotFoundError):

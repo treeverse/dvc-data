@@ -50,6 +50,24 @@ def test_md5(tmp_path):
     )
 
 
+def test_md5_skips_storage_check_for_objects_in_odb(tmp_path, odb, mocker):
+    import sys
+
+    save_module = sys.modules["dvc_data.index.save"]
+    (tmp_path / "foo").write_bytes(b"foo\n")
+    (tmp_path / "new").write_bytes(b"new\n")
+
+    index = md5(build(str(tmp_path), LocalFileSystem()))
+    meta_matches = mocker.spy(save_module, "_meta_matches")
+
+    index = md5(index, odb=odb)
+
+    assert set(index.keys()) == {("foo",), ("new",)}
+    assert [call.args[1] for call in meta_matches.call_args_list] == [
+        str(tmp_path / "new")
+    ]
+
+
 def test_save(tmp_path, odb):
     (tmp_path / "foo").write_bytes(b"foo\n")
     (tmp_path / "data").mkdir()
@@ -153,6 +171,22 @@ def test_fetch(tmp_path, make_odb, odb):
         (tmp_path / "checkout" / "data" / "bar"),
         (tmp_path / "checkout" / "data" / "baz"),
     }
+
+
+def test_fetch_from_file_storage(tmp_path, make_odb):
+    from dvc_data.index import FileStorage
+    from dvc_data.index.fetch import fetch
+
+    (tmp_path / "foo").write_bytes(b"foo\n")
+    fs = LocalFileSystem()
+    index = md5(build(str(tmp_path), fs))
+    cache_odb = make_odb()
+    index.storage_map.add_cache(ObjectStorage((), cache_odb))
+    index.storage_map.add_data(FileStorage((), fs, str(tmp_path)))
+
+    assert fetch([index]) == (1, 0)
+    assert cache_odb.exists("d3b07384d113edec49eaa6238ad5ff00")
+    assert fetch([index]) == (0, 0)
 
 
 def test_push(tmp_path, make_odb, odb):
