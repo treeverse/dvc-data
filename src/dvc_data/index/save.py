@@ -40,6 +40,7 @@ def md5(
     state: Optional["StateBase"] = None,
     storage: str = "data",
     name: str = DEFAULT_ALGORITHM,
+    odb: Optional["HashFileDB"] = None,
 ) -> "DataIndex":
     from .index import DataIndex, DataIndexEntry
 
@@ -53,6 +54,11 @@ def md5(
         hash_info = None
         if entry.hash_info and entry.hash_info.name in ("md5", "md5-dos2unix"):
             hash_info = entry.hash_info
+
+        if odb and hash_info and hash_info.value and odb.exists(hash_info.value):
+            # already in odb, no need to check the storage
+            ret.add(entry)
+            continue
 
         try:
             fs, path = index.storage_map.get_storage(entry, storage)

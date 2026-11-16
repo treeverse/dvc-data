@@ -50,6 +50,24 @@ def test_md5(tmp_path):
     )
 
 
+def test_md5_skips_storage_check_for_objects_in_odb(tmp_path, odb, mocker):
+    import sys
+
+    save_module = sys.modules["dvc_data.index.save"]
+    (tmp_path / "foo").write_bytes(b"foo\n")
+    (tmp_path / "new").write_bytes(b"new\n")
+
+    index = md5(build(str(tmp_path), LocalFileSystem()))
+    meta_matches = mocker.spy(save_module, "_meta_matches")
+
+    index = md5(index, odb=odb)
+
+    assert set(index.keys()) == {("foo",), ("new",)}
+    assert [call.args[1] for call in meta_matches.call_args_list] == [
+        str(tmp_path / "new")
+    ]
+
+
 def test_save(tmp_path, odb):
     (tmp_path / "foo").write_bytes(b"foo\n")
     (tmp_path / "data").mkdir()
