@@ -173,6 +173,22 @@ def test_fetch(tmp_path, make_odb, odb):
     }
 
 
+def test_fetch_from_file_storage(tmp_path, make_odb):
+    from dvc_data.index import FileStorage
+    from dvc_data.index.fetch import fetch
+
+    (tmp_path / "foo").write_bytes(b"foo\n")
+    fs = LocalFileSystem()
+    index = md5(build(str(tmp_path), fs))
+    cache_odb = make_odb()
+    index.storage_map.add_cache(ObjectStorage((), cache_odb))
+    index.storage_map.add_data(FileStorage((), fs, str(tmp_path)))
+
+    assert fetch([index]) == (1, 0)
+    assert cache_odb.exists("d3b07384d113edec49eaa6238ad5ff00")
+    assert fetch([index]) == (0, 0)
+
+
 def test_push(tmp_path, make_odb, odb):
     from dvc_data.index.collect import collect
     from dvc_data.index.push import push
