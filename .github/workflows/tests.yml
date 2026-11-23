@@ -14,7 +14,40 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  lint:
+    timeout-minutes: 10
+    runs-on: ubuntu-latest
+    steps:
+    - name: Check out the repository
+      uses: actions/checkout@v6
+      with:
+        fetch-depth: 0
+
+    - name: Set up Python 3.12
+      uses: actions/setup-python@v6
+      with:
+        python-version: '3.12'
+
+    - uses: astral-sh/setup-uv@v7
+      with:
+        enable-cache: true
+        cache-suffix: lint
+        cache-dependency-glob: pyproject.toml
+
+    - name: Install nox
+      run: uv pip install --system nox --upgrade
+
+    - name: Cache pre-commit hooks
+      uses: actions/cache@v5
+      with:
+        path: ~/.cache/pre-commit
+        key: pre-commit-3|${{ env.pythonLocation }}|${{ hashFiles('.pre-commit-config.yaml') }}
+
+    - name: Lint code
+      run: nox -s lint
+
   tests:
+    needs: [lint]
     timeout-minutes: 30
     runs-on: ${{ matrix.os }}
     strategy:
@@ -40,17 +73,9 @@ jobs:
         enable-cache: true
         cache-suffix: ${{ matrix.pyv }}
         cache-dependency-glob: pyproject.toml
+
     - name: Install nox
       run: uv pip install --system nox --upgrade
-
-    - name: Cache pre-commit hooks
-      uses: actions/cache@v5
-      with:
-        path: ~/.cache/pre-commit
-        key: pre-commit-3|${{ env.pythonLocation }}|${{ hashFiles('.pre-commit-config.yaml') }}
-
-    - name: Lint code
-      run: nox -s lint
 
     - name: Run tests
       run: nox -s tests-${{ matrix.pyv }} -- --cov-report=xml
@@ -63,7 +88,7 @@ jobs:
 
   check:
     if: always()
-    needs: [tests]
+    needs: [lint, tests]
     runs-on: ubuntu-latest
     steps:
       - uses: re-actors/alls-green@release/v1
